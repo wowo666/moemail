@@ -1,5 +1,10 @@
+packages:
+  - '.'
+  - 'packages/*'
+  - 'workers/*'
+
 allowBuilds:
-  bun: set this to true or false
-  esbuild: set this to true or false
-  sharp: set this to true or false
-  workerd: set this to true or false
+  bun: true
+  esbuild: true
+  sharp: true
+  workerd: true

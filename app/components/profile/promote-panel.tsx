@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
-import { Gem, Sword, User2, Loader2 } from "lucide-react"
+import { Gem, Sword, User2, Loader2, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { useState, useEffect } from "react"
 import { useToast } from "@/components/ui/use-toast"
@@ -55,6 +55,37 @@ export function PromotePanel() {
   useEffect(() => {
     fetchUsers()
   }, [])
+
+  const handleDelete = async (userId: string, userIdentifier: string) => {
+    if (!window.confirm(`确定要彻底删除用户 "${userIdentifier}" 吗？此操作将清除该用户所有的临时邮箱、邮件及配置，且不可恢复！`)) {
+      return
+    }
+
+    try {
+      const res = await fetch("/api/roles/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId })
+      })
+
+      if (!res.ok) {
+        const error = await res.json() as { error: string }
+        throw new Error(error.error || "删除失败")
+      }
+
+      toast({
+        title: "用户删除成功",
+        description: `已成功删除用户: ${userIdentifier}`,
+      })
+      fetchUsers()
+    } catch (error) {
+      toast({
+        title: "删除用户失败",
+        description: error instanceof Error ? error.message : "删除失败",
+        variant: "destructive"
+      })
+    }
+  }
 
   const handleAction = async () => {
     if (!searchText) return
@@ -207,59 +238,69 @@ export function PromotePanel() {
                           {displayRole}
                         </span>
                       ) : (
-                        <Select 
-                          value={usr.role} 
-                          onValueChange={async (newRole) => {
-                            if (usr.role === newRole) return
-                            try {
-                              const promoteRes = await fetch("/api/roles/promote", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  userId: usr.id,
-                                  roleName: newRole
+                        <div className="flex items-center gap-2">
+                          <Select 
+                            value={usr.role} 
+                            onValueChange={async (newRole) => {
+                              if (usr.role === newRole) return
+                              try {
+                                const promoteRes = await fetch("/api/roles/promote", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    userId: usr.id,
+                                    roleName: newRole
+                                  })
                                 })
-                              })
-                              if (!promoteRes.ok) {
-                                throw new Error("更新失败")
+                                if (!promoteRes.ok) {
+                                  throw new Error("更新失败")
+                                }
+                                toast({
+                                  title: t("updateSuccess"),
+                                  description: `${usr.username || usr.email} -> ${roleNames[newRole as RoleWithoutEmperor]}`
+                                })
+                                fetchUsers()
+                              } catch {
+                                toast({
+                                  title: t("updateFailed"),
+                                  variant: "destructive"
+                                })
                               }
-                              toast({
-                                title: t("updateSuccess"),
-                                description: `${usr.username || usr.email} -> ${roleNames[newRole as RoleWithoutEmperor]}`
-                              })
-                              fetchUsers()
-                            } catch {
-                              toast({
-                                title: t("updateFailed"),
-                                variant: "destructive"
-                              })
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="w-28 h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={ROLES.DUKE}>
-                              <span className="flex items-center gap-1.5 text-xs">
-                                <Gem className="w-3.5 h-3.5" />
-                                {roleNames[ROLES.DUKE]}
-                              </span>
-                            </SelectItem>
-                            <SelectItem value={ROLES.KNIGHT}>
-                              <span className="flex items-center gap-1.5 text-xs">
-                                <Sword className="w-3.5 h-3.5" />
-                                {roleNames[ROLES.KNIGHT]}
-                              </span>
-                            </SelectItem>
-                            <SelectItem value={ROLES.CIVILIAN}>
-                              <span className="flex items-center gap-1.5 text-xs">
-                                <User2 className="w-3.5 h-3.5" />
-                                {roleNames[ROLES.CIVILIAN]}
-                              </span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                            }}
+                          >
+                            <SelectTrigger className="w-28 h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={ROLES.DUKE}>
+                                <span className="flex items-center gap-1.5 text-xs">
+                                  <Gem className="w-3.5 h-3.5" />
+                                  {roleNames[ROLES.DUKE]}
+                                </span>
+                              </SelectItem>
+                              <SelectItem value={ROLES.KNIGHT}>
+                                <span className="flex items-center gap-1.5 text-xs">
+                                  <Sword className="w-3.5 h-3.5" />
+                                  {roleNames[ROLES.KNIGHT]}
+                                </span>
+                              </SelectItem>
+                              <SelectItem value={ROLES.CIVILIAN}>
+                                <span className="flex items-center gap-1.5 text-xs">
+                                  <User2 className="w-3.5 h-3.5" />
+                                  {roleNames[ROLES.CIVILIAN]}
+                                </span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => handleDelete(usr.id, usr.username || usr.email || 'Unnamed')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       )}
                     </div>
                   </div>

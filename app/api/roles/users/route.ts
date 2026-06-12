@@ -1,5 +1,5 @@
 import { createDb } from "@/lib/db"
-import { users } from "@/lib/schema"
+import { users, apiKeys, userRoles } from "@/lib/schema"
 import { eq } from "drizzle-orm"
 import { checkPermission } from "@/lib/auth"
 import { PERMISSIONS } from "@/lib/permissions"
@@ -86,6 +86,50 @@ export async function POST(request: Request) {
     console.error("Failed to find user:", error)
     return Response.json(
       { error: "查询用户失败" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const canAccess = await checkPermission(PERMISSIONS.PROMOTE_USER)
+    if (!canAccess) {
+      return Response.json({ error: "权限不足" }, { status: 403 })
+    }
+
+    const json = await request.json()
+    const { userId } = json as { userId: string }
+
+    if (!userId) {
+      return Response.json({ error: "请提供要删除的用户 ID" }, { status: 400 })
+    }
+
+    const db = createDb()
+
+    // 检查目标用户是否是皇帝，防止越权删除管理员
+    const targetUserRole = await db.query.userRoles.findFirst({
+      where: eq(userRoles.userId, userId),
+      with: {
+        role: true
+      }
+    })
+
+    if (targetUserRole?.role.name === 'emperor') {
+      return Response.json({ error: "不能删除皇帝角色的用户" }, { status: 400 })
+    }
+
+    // 先删除该用户的 API Keys（防止数据库外键约束报错）
+    await db.delete(apiKeys).where(eq(apiKeys.userId, userId))
+
+    // 删除用户本人，会级联删除 accounts, userRoles, emails, webhooks 等
+    await db.delete(users).where(eq(users.id, userId))
+
+    return Response.json({ success: true })
+  } catch (error) {
+    console.error("Failed to delete user:", error)
+    return Response.json(
+      { error: "删除用户失败" },
       { status: 500 }
     )
   }

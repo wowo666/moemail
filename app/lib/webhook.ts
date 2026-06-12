@@ -19,6 +19,55 @@ export interface WebhookPayload {
 export async function callWebhook(url: string, payload: WebhookPayload) {
   let lastError: Error | null = null
   
+  let bodyContent = JSON.stringify(payload.data)
+
+  // 自动适配飞书机器人 Webhook 格式为富文本卡片
+  if (url.includes("open.feishu.cn/open-apis/bot/v2/hook/")) {
+    const email = payload.data
+    bodyContent = JSON.stringify({
+      msg_type: "interactive",
+      card: {
+        header: {
+          title: {
+            tag: "plain_text",
+            content: "📧 MoeMail 收到新邮件"
+          },
+          template: "purple"
+        },
+        elements: [
+          {
+            tag: "div",
+            text: {
+              tag: "lark_md",
+              content: `**发件人:** ${email.fromAddress}\n**收件人:** ${email.toAddress}\n**主题:** ${email.subject}`
+            }
+          },
+          {
+            tag: "hr"
+          },
+          {
+            tag: "div",
+            text: {
+              tag: "plain_text",
+              content: email.content.length > 600 ? `${email.content.slice(0, 600)}...` : email.content
+            }
+          }
+        ]
+      }
+    })
+  }
+  // 自动适配钉钉机器人 Webhook 格式为 Markdown 消息
+  else if (url.includes("oapi.dingtalk.com/robot/send")) {
+    const email = payload.data
+    bodyContent = JSON.stringify({
+      msgtype: "markdown",
+      markdown: {
+        title: "MoeMail 收到新邮件",
+        text: `### 📧 MoeMail 收到新邮件\n- **发件人:** ${email.fromAddress}\n- **收件人:** ${email.toAddress}\n- **主题:** ${email.subject}\n\n---\n\n${email.content.length > 600 ? `${email.content.slice(0, 600)}...` : email.content}`
+      }
+    })
+  }
+
   for (let i = 0; i < WEBHOOK_CONFIG.MAX_RETRIES; i++) {
     try {
       const controller = new AbortController()
@@ -30,7 +79,7 @@ export async function callWebhook(url: string, payload: WebhookPayload) {
           "Content-Type": "application/json",
           "X-Webhook-Event": payload.event,
         },
-        body: JSON.stringify(payload.data),
+        body: bodyContent,
         signal: controller.signal,
       })
 

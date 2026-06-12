@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Gem, Sword, User2, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { ROLES, Role } from "@/lib/permissions"
 import {
@@ -29,6 +29,7 @@ export function PromotePanel() {
   const [searchText, setSearchText] = useState("")
   const [loading, setLoading] = useState(false)
   const [targetRole, setTargetRole] = useState<RoleWithoutEmperor>(ROLES.KNIGHT)
+  const [usersList, setUsersList] = useState<any[]>([])
   const { toast } = useToast()
   
   const roleNames = {
@@ -36,6 +37,24 @@ export function PromotePanel() {
     [ROLES.KNIGHT]: tCard("roles.KNIGHT"),
     [ROLES.CIVILIAN]: tCard("roles.CIVILIAN"),
   } as const
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch("/api/roles/users")
+      if (res.ok) {
+        const data = await res.json() as { users: any[] }
+        // Filter out Emperor from regular management list if preferred, but keeping all users is fine
+        // since Emperor cannot be changed by design
+        setUsersList(data.users || [])
+      }
+    } catch (err) {
+      console.error("Failed to fetch users", err)
+    }
+  }
+
+  useEffect(() => {
+    fetchUsers()
+  }, [])
 
   const handleAction = async () => {
     if (!searchText) return
@@ -96,6 +115,7 @@ export function PromotePanel() {
         description: `${data.user.username || data.user.email} - ${roleNames[targetRole]}`,
       })
       setSearchText("")
+      fetchUsers()
     } catch (error) {
       toast({
         title: t("updateFailed"),
@@ -163,6 +183,91 @@ export function PromotePanel() {
             `${t("promote")} ${roleNames[targetRole]}`
           )}
         </Button>
+
+        {/* 用户列表 */}
+        <div className="mt-6 border-t pt-6">
+          <h3 className="text-sm font-semibold mb-3">已注册用户列表</h3>
+          {usersList.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("noUsers")}</p>
+          ) : (
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+              {usersList.map((usr) => {
+                const isEmperor = usr.role === 'emperor'
+                const displayRole = isEmperor ? tCard("roles.EMPEROR") : roleNames[usr.role as RoleWithoutEmperor] || usr.role
+                
+                return (
+                  <div key={usr.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                    <div className="min-w-0 flex-1 mr-4">
+                      <div className="font-medium text-sm truncate">{usr.username || usr.name || 'Unnamed'}</div>
+                      <div className="text-xs text-muted-foreground truncate">{usr.email}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {isEmperor ? (
+                        <span className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded font-medium">
+                          {displayRole}
+                        </span>
+                      ) : (
+                        <Select 
+                          value={usr.role} 
+                          onValueChange={async (newRole) => {
+                            if (usr.role === newRole) return
+                            try {
+                              const promoteRes = await fetch("/api/roles/promote", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  userId: usr.id,
+                                  roleName: newRole
+                                })
+                              })
+                              if (!promoteRes.ok) {
+                                throw new Error("更新失败")
+                              }
+                              toast({
+                                title: t("updateSuccess"),
+                                description: `${usr.username || usr.email} -> ${roleNames[newRole as RoleWithoutEmperor]}`
+                              })
+                              fetchUsers()
+                            } catch {
+                              toast({
+                                title: t("updateFailed"),
+                                variant: "destructive"
+                              })
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-28 h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={ROLES.DUKE}>
+                              <span className="flex items-center gap-1.5 text-xs">
+                                <Gem className="w-3.5 h-3.5" />
+                                {roleNames[ROLES.DUKE]}
+                              </span>
+                            </SelectItem>
+                            <SelectItem value={ROLES.KNIGHT}>
+                              <span className="flex items-center gap-1.5 text-xs">
+                                <Sword className="w-3.5 h-3.5" />
+                                {roleNames[ROLES.KNIGHT]}
+                              </span>
+                            </SelectItem>
+                            <SelectItem value={ROLES.CIVILIAN}>
+                              <span className="flex items-center gap-1.5 text-xs">
+                                <User2 className="w-3.5 h-3.5" />
+                                {roleNames[ROLES.CIVILIAN]}
+                              </span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
